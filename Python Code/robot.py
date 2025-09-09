@@ -1,7 +1,7 @@
 import random
 
 class Robot:
-    def __init__(self, id, team, current_coord, facing, message_board):
+    def __init__(self, id, team, current_coord, facing, message_board, deposit_box_coord):
         self.id = id
         self.team = team
         self.current_coord = current_coord
@@ -14,15 +14,94 @@ class Robot:
         self.observable_cells = []
         self.knowledge_base = {}
         self.message_board = message_board
+        self.deposit_box_coord = deposit_box_coord
+        self.goal = None
+        self.role = None # 'SEEKER', 'HELPER', 'CARRIER'
 
-    def make_decision(self):
-        decision = random.randint(1, 3)
-        if decision == 1:
-            return "MOVE"
-        elif decision == 2:
-            return ("TURN", random.choice(["LEFT", "RIGHT", "UP", "DOWN"]))
+    def calculate_distance(self, coord1, coord2):
+        return abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1])
+
+    def get_move_towards(self, target_coord):
+        x, y = self.current_coord
+        target_x, target_y = target_coord
+
+        dx = target_x - x
+        dy = target_y - y
+
+        if abs(dx) > abs(dy):
+            if dx > 0:
+                if self.facing == 'RIGHT': return 'MOVE'
+                else: return ('TURN', 'RIGHT')
+            else:
+                if self.facing == 'LEFT': return 'MOVE'
+                else: return ('TURN', 'LEFT')
         else:
+            if dy > 0:
+                if self.facing == 'UP': return 'MOVE'
+                else: return ('TURN', 'UP')
+            else:
+                if self.facing == 'DOWN': return 'MOVE'
+                else: return ('TURN', 'DOWN')
+
+    def find_closest_teammate(self, robot_manager):
+        closest_teammate = None
+        min_dist = float('inf')
+        for teammate in robot_manager.get_robots():
+            if teammate.id != self.id and not teammate.is_carrying:
+                dist = self.calculate_distance(self.current_coord, teammate.current_coord)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_teammate = teammate
+        return closest_teammate
+
+    def make_decision(self, robot_manager):
+        # 1. Role-based logic
+        if self.role == 'CARRIER':
+            self.goal = self.deposit_box_coord
+            if self.current_coord == self.deposit_box_coord:
+                return "PICK_UP" # Signal to drop at deposit
+            return self.get_move_towards(self.goal)
+
+        if self.role == 'HELPER':
+            if self.goal and self.current_coord == self.goal:
+                return "PICK_UP"
+            if self.goal:
+                return self.get_move_towards(self.goal)
+
+        # 2. Check messages
+        for message in list(self.message_board[self.id]):
+            if message.startswith("GOLD:"):
+                parts = message.split(":")
+                coord_parts = parts[1].strip().split(',')
+                gold_coord = (int(coord_parts[0]), int(coord_parts[1]))
+                self.goal = gold_coord
+                self.role = 'HELPER'
+                self.message_board[self.id].remove(message)
+                return self.get_move_towards(self.goal)
+
+        # 3. If no specific role/task, observe and decide
+        # Look for gold
+        for coord, cell in self.knowledge_base.items():
+            if cell.get_gold_amount():
+                self.goal = coord
+                self.role = 'SEEKER'
+                closest_teammate = self.find_closest_teammate(robot_manager)
+                if closest_teammate:
+                    # Send message to the specific teammate
+                    self.message_board[closest_teammate.id].add(f"GOLD:{coord[0]},{coord[1]}")
+                return self.get_move_towards(self.goal)
+
+        # If at a goal (e.g. gold location from previous turn), try to pick up
+        if self.goal and self.current_coord == self.goal:
             return "PICK_UP"
+
+        # If still has a goal from a previous turn
+        if self.goal:
+            return self.get_move_towards(self.goal)
+
+        # 4. Default behavior: explore randomly
+        return random.choice(["MOVE", ("TURN", random.choice(["LEFT", "RIGHT", "UP", "DOWN"]))])
+
 
     def take_action(self, action, grid):
         if isinstance(action, tuple) and action[0] == "TURN":
@@ -58,15 +137,23 @@ class Robot:
         if not self.is_carrying:
             self.is_carrying = True
             self.pair_id = pair_id
+            self.goal = None
+            self.role = 'CARRIER'
 
     def drop_gold(self):
         print(f"{self.id} has DROPPED a GOLD BAR at {self.coord_history[self.turn_count - 1]}")
         self.is_carrying = False
+        self.goal = None
+        self.role = None
+        self.pair_id = None
         return self.coord_history[self.turn_count - 1]
 
     def score_gold(self):
         print(f"{self.id} has SCORED!")
         self.is_carrying = False
+        self.goal = None
+        self.role = None
+        self.pair_id = None
 
     def _get_observable_cells(self, grid_width, grid_height):
         observable = []
@@ -91,6 +178,7 @@ class Robot:
     def observe(self, grid):
         self.observable_cells = self._get_observable_cells(grid.width, grid.height)
         # print(f"Robot {self.id} at {self.current_coord} facing {self.facing} observes: {self.observable_cells}")
+        self.knowledge_base.clear() # Clear previous observations
         for coord in self.observable_cells:
             cell = grid.get_cell(coord)
             if cell:
@@ -100,4 +188,4 @@ class Robot:
         carrying_status = ""
         if self.is_carrying:
             carrying_status = f" is CARRYING with {self.pair_id}"
-        return f"{self.id} is at {self.current_coord} facing {self.facing}{carrying_status}"
+        return f"{self.id}({self.role}) is at {self.current_coord} facing {self.facing}{carrying_status}"

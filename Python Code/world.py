@@ -32,17 +32,19 @@ class World:
         robots = {}
         message_board = {}
         first_id = 'A' if team == "RED" else 'a'
+        deposit_box_coord = self.red_deposit_box if team == "RED" else self.blue_deposit_box
         for i in range(n_robots):
             robot_id = chr(ord(first_id) + i)
             message_board[robot_id] = set()
             start_coord = (random.randint(0, self.width - 1), random.randint(0, self.height - 1))
             start_facing = random.choice(["LEFT", "RIGHT", "UP", "DOWN"])
-            robot = Robot(robot_id, team, start_coord, start_facing, message_board)
+            robot = Robot(robot_id, team, start_coord, start_facing, message_board, deposit_box_coord)
             self.grid.add_robot(robot, start_coord)
             robots[robot_id] = robot
         return RobotManager(team, robots, message_board)
 
     def next_turn(self):
+        self.pickup_check = {}
         self.make_decisions_and_take_actions(self.blue_team)
         self.make_decisions_and_take_actions(self.red_team)
         self.check_pickup_logic()
@@ -51,9 +53,9 @@ class World:
 
     def make_decisions_and_take_actions(self, robot_manager):
         # print(f"{robot_manager.team} Robots Decisions")
-        self.pickup_check = {}
         for robot in robot_manager.get_robots():
-            action = robot.make_decision()
+            robot.observe(self.grid)
+            action = robot.make_decision(robot_manager)
             if action == "PICK_UP":
                 if robot.current_coord not in self.pickup_check:
                     self.pickup_check[robot.current_coord] = []

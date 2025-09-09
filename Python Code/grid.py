@@ -56,7 +56,7 @@ class Grid:
     #     return grid_str
     def __str__(self):
         # Set a fixed width for each cell to attempt alignment
-        CELL_WIDTH = 6
+        CELL_WIDTH = 7
 
         grid_str = ""
         for row in self.grid:

@@ -123,9 +123,9 @@ class Cell:
 
         # Robots
         if self.red_robots > 0:
-            parts.append(f"R{self.red_robots}")
+            parts.append(f"R{self.red_robots if self.red_robots > 1 else ''}")
         if self.blue_robots > 0:
-            parts.append(f"B{self.blue_robots}")
+            parts.append(f"B{self.blue_robots if self.blue_robots > 1 else ''}")
 
         if not parts:
             return "."

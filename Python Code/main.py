@@ -5,17 +5,17 @@ HEIGHT = 20
 P_GOLD = 0.1
 MAX_GOLD = 3
 N_ROBOTS = 10
-TURNS = 100 # Increased turns for the larger simulation
+TURNS = 100
 
 def main():
     world = World(WIDTH, HEIGHT, P_GOLD, MAX_GOLD, N_ROBOTS)
     print("Initial Grid")
-    # world.print_grid() # Printing a 20x20 grid is too large for the console
+    world.print_grid()
     print("-" * 100)
 
     for i in range(TURNS):
         print(f"TURN {i}")
-        # print("Current Grid")
+        print("Current Grid")
         world.print_grid()
         print("\nCurrent Robot Status")
         world.print_robots()
