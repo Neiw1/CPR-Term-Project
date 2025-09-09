@@ -119,4 +119,4 @@ class World:
     def print_robots(self):
         for robot in self.red_team.get_robots() + self.blue_team.get_robots():
             pass
-            #print(robot)
+            print(robot)

@@ -70,19 +70,17 @@ class Cell:
         RESET = '\033[0m'
 
         parts = []
-        # Gold
+
         if self.content == "GoldBars" and self.content_value > 0:
             gold_str = f"G{self.content_value if self.content_value > 1 else ''}"
             parts.append(f"{YELLOW}{gold_str}{RESET}")
-        # Deposit Box
         elif self.content == "DepositBox":
             team_char = self.team[0]
             if self.team == "RED":
                 parts.append(f"{RED}D{team_char}{RESET}")
             else:
                 parts.append(f"{BLUE}D{team_char}{RESET}")
-
-        # Robots
+                
         if self.red_robots > 0:
             red_str = f"R{self.red_robots if self.red_robots > 1 else ''}"
             parts.append(f"{RED}{red_str}{RESET}")
