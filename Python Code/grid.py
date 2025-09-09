@@ -27,43 +27,20 @@ class Grid:
         if cell:
             cell.remove_bot(robot)
 
-    # def __str__(self):
-    #     grid_str = ""
-    #     for index, row in enumerate(self.grid):
-    #         # grid_str += f" {self.height - index - 1} "
-    #         for cell in row:
-    #             grid_str += f"{cell} "
-    #         grid_str += "\n"
-    #     grid_str += "   "
-    #     for i in range(self.width):
-    #         grid_str += f"    {i}     "
-    #     return grid_str
-
-    # def __str__(self):
-    #     grid_str = ""
-    #     # Top border
-    #     grid_str += "+" + ("-" * (self.width * 4)) + "+\n"
-    #     for row in self.grid:
-    #         # Side border
-    #         grid_str += "|"
-    #         for cell in row:
-    #             grid_str += f"{cell}"  # cell is 4 chars
-    #         grid_str += "|\n"
-    #     # Bottom border
-    #     grid_str += "+" + ("-" * (self.width * 4)) + "+\n"
-
-    #     # No column numbers are printed
-    #     return grid_str
     def __str__(self):
-        # Set a fixed width for each cell to attempt alignment
-        CELL_WIDTH = 7
+        import re
 
+        def get_visible_width(s):
+            return len(re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', s))
+
+        CELL_WIDTH = 6 # Increased width to accommodate colors and content
         grid_str = ""
         for row in self.grid:
             for cell in row:
                 cell_content = str(cell)
-                # Pad the string to the fixed width
-                grid_str += f"{cell_content:<{CELL_WIDTH}}"
+                visible_width = get_visible_width(cell_content)
+                padding = " " * (CELL_WIDTH - visible_width)
+                grid_str += cell_content + padding
             grid_str += "\n"
         return grid_str
 
