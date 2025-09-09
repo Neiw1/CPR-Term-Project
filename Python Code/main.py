@@ -1,0 +1,31 @@
+from world import World
+
+WIDTH = 20
+HEIGHT = 20
+P_GOLD = 0.5
+MAX_GOLD = 5
+N_ROBOTS = 10
+TURNS = 100 # Increased turns for the larger simulation
+
+def main():
+    world = World(WIDTH, HEIGHT, P_GOLD, MAX_GOLD, N_ROBOTS)
+    print("Initial Grid")
+    # world.print_grid() # Printing a 20x20 grid is too large for the console
+    print("-" * 100)
+
+    for i in range(TURNS):
+        print(f"TURN {i}")
+        # print("Current Grid")
+        # world.print_grid()
+        print("\nCurrent Robot Status")
+        world.print_robots()
+        print()
+        world.next_turn()
+        print("-" * 100)
+
+    print("Final Grid")
+    # world.print_grid()
+    print(f"Final Scores -> RED: {world.red_score} | BLUE: {world.blue_score}")
+
+if __name__ == "__main__":
+    main()
