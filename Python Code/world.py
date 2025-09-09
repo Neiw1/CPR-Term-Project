@@ -50,7 +50,7 @@ class World:
         self.check_drop_deposit()
 
     def make_decisions_and_take_actions(self, robot_manager):
-        print(f"{robot_manager.team} Robots Decisions")
+        # print(f"{robot_manager.team} Robots Decisions")
         self.pickup_check = {}
         for robot in robot_manager.get_robots():
             action = robot.make_decision()
@@ -59,7 +59,7 @@ class World:
                     self.pickup_check[robot.current_coord] = []
                 self.pickup_check[robot.current_coord].append((robot.id, robot.team))
             
-            print(f"Robot {robot.id} decided to {action}")
+            # print(f"Robot {robot.id} decided to {action}")
             robot.take_action(action, self.grid)
 
     def check_pickup_logic(self):
@@ -72,11 +72,11 @@ class World:
                 if len(reds) == 2:
                     if self.red_team.pickup_gold(reds[0][0], reds[1][0]):
                         cell.remove_gold()
-                        print(f"{reds[0][0]} and {reds[1][0]} has SUCCESSFULLY picked up a GOLD BAR")
+                        # print(f"{reds[0][0]} and {reds[1][0]} has SUCCESSFULLY picked up a GOLD BAR")
                 if len(blues) == 2:
                     if self.blue_team.pickup_gold(blues[0][0], blues[1][0]):
                         cell.remove_gold()
-                        print(f"{blues[0][0]} and {blues[1][0]} has SUCCESSFULLY picked up a GOLD BAR")
+                        # print(f"{blues[0][0]} and {blues[1][0]} has SUCCESSFULLY picked up a GOLD BAR")
 
     def check_fumble(self):
         fumbled_gold_coords = []
@@ -116,4 +116,5 @@ class World:
 
     def print_robots(self):
         for robot in self.red_team.get_robots() + self.blue_team.get_robots():
-            print(robot)
+            pass
+            #print(robot)

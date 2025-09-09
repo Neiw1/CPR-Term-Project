@@ -2,8 +2,8 @@ from world import World
 
 WIDTH = 20
 HEIGHT = 20
-P_GOLD = 0.5
-MAX_GOLD = 5
+P_GOLD = 0.1
+MAX_GOLD = 3
 N_ROBOTS = 10
 TURNS = 100 # Increased turns for the larger simulation
 
@@ -16,7 +16,7 @@ def main():
     for i in range(TURNS):
         print(f"TURN {i}")
         # print("Current Grid")
-        # world.print_grid()
+        world.print_grid()
         print("\nCurrent Robot Status")
         world.print_robots()
         print()
@@ -24,7 +24,7 @@ def main():
         print("-" * 100)
 
     print("Final Grid")
-    # world.print_grid()
+    world.print_grid()
     print(f"Final Scores -> RED: {world.red_score} | BLUE: {world.blue_score}")
 
 if __name__ == "__main__":

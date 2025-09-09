@@ -27,14 +27,43 @@ class Grid:
         if cell:
             cell.remove_bot(robot)
 
+    # def __str__(self):
+    #     grid_str = ""
+    #     for index, row in enumerate(self.grid):
+    #         # grid_str += f" {self.height - index - 1} "
+    #         for cell in row:
+    #             grid_str += f"{cell} "
+    #         grid_str += "\n"
+    #     grid_str += "   "
+    #     for i in range(self.width):
+    #         grid_str += f"    {i}     "
+    #     return grid_str
+
+    # def __str__(self):
+    #     grid_str = ""
+    #     # Top border
+    #     grid_str += "+" + ("-" * (self.width * 4)) + "+\n"
+    #     for row in self.grid:
+    #         # Side border
+    #         grid_str += "|"
+    #         for cell in row:
+    #             grid_str += f"{cell}"  # cell is 4 chars
+    #         grid_str += "|\n"
+    #     # Bottom border
+    #     grid_str += "+" + ("-" * (self.width * 4)) + "+\n"
+
+    #     # No column numbers are printed
+    #     return grid_str
     def __str__(self):
+        # Set a fixed width for each cell to attempt alignment
+        CELL_WIDTH = 6
+
         grid_str = ""
-        for index, row in enumerate(self.grid):
-            grid_str += f" {self.height - index - 1} "
+        for row in self.grid:
             for cell in row:
-                grid_str += f"{cell} "
+                cell_content = str(cell)
+                # Pad the string to the fixed width
+                grid_str += f"{cell_content:<{CELL_WIDTH}}"
             grid_str += "\n"
-        grid_str += "   "
-        for i in range(self.width):
-            grid_str += f"    {i}     "
         return grid_str
+
