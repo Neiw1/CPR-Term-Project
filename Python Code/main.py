@@ -1,11 +1,12 @@
 from world import World
+import time
 
 WIDTH = 20
 HEIGHT = 20
 P_GOLD = 0.1
 MAX_GOLD = 3
 N_ROBOTS = 10
-TURNS = 100
+TURNS = 40
 
 def main():
     world = World(WIDTH, HEIGHT, P_GOLD, MAX_GOLD, N_ROBOTS)
@@ -18,10 +19,11 @@ def main():
         print("Current Grid")
         world.print_grid()
         print("\nCurrent Robot Status")
-        world.print_robots()
+        #world.print_robots()
         print()
         world.next_turn()
         print("-" * 100)
+        time.sleep(0.5)
 
     print("Final Grid")
     world.print_grid()

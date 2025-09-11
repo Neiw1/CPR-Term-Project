@@ -33,7 +33,7 @@ class Grid:
         def get_visible_width(s):
             return len(re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', s))
 
-        CELL_WIDTH = 6
+        CELL_WIDTH = 8
         grid_str = ""
         for row in self.grid:
             for cell in row:

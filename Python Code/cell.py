@@ -3,8 +3,8 @@ import random
 class Cell:
     def __init__(self, coord, p_gold, max_gold):
         self.coord = coord
-        self.red_robots = 0
-        self.blue_robots = 0
+        self.red_robots = []
+        self.blue_robots = []
         self.content = None
         self.content_value = 0
         self.team = None
@@ -16,15 +16,15 @@ class Cell:
 
     def add_bot(self, robot):
         if robot.team == "RED":
-            self.red_robots += 1
+            self.red_robots.append(robot)
         else:
-            self.blue_robots += 1
+            self.blue_robots.append(robot)
 
     def remove_bot(self, robot):
-        if robot.team == "RED":
-            self.red_robots -= 1
-        else:
-            self.blue_robots -= 1
+        if robot.team == "RED" and robot in self.red_robots:
+            self.red_robots.remove(robot)
+        elif robot.team == "BLUE" and robot in self.blue_robots:
+            self.blue_robots.remove(robot)
 
     def get_gold_amount(self):
         if self.content == "GoldBars" and self.content_value > 0:
@@ -67,6 +67,7 @@ class Cell:
         RED = '\033[91m'
         BLUE = '\033[94m'
         YELLOW = '\033[93m'
+        GREEN = '\033[92m'
         RESET = '\033[0m'
 
         parts = []
@@ -80,12 +81,21 @@ class Cell:
                 parts.append(f"{RED}D{team_char}{RESET}")
             else:
                 parts.append(f"{BLUE}D{team_char}{RESET}")
-                
-        if self.red_robots > 0:
-            red_str = f"R{self.red_robots if self.red_robots > 1 else ''}"
+
+        if self.red_robots:
+            carrying_gold = any(r.is_carrying for r in self.red_robots)
+            count = len(self.red_robots)
+            red_str = f"R{count if count > 1 else ''}"
+            if carrying_gold:
+                red_str += f"({GREEN}G{RED})"
             parts.append(f"{RED}{red_str}{RESET}")
-        if self.blue_robots > 0:
-            blue_str = f"B{self.blue_robots if self.blue_robots > 1 else ''}"
+
+        if self.blue_robots:
+            carrying_gold = any(r.is_carrying for r in self.blue_robots)
+            count = len(self.blue_robots)
+            blue_str = f"B{count if count > 1 else ''}"
+            if carrying_gold:
+                blue_str += f"({GREEN}G{BLUE})"
             parts.append(f"{BLUE}{blue_str}{RESET}")
 
         if not parts:
