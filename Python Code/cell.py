@@ -102,6 +102,3 @@ class Cell:
             return "."
         else:
             return ",".join(parts)
-
-
-    

@@ -91,7 +91,7 @@ class Robot:
                     self.message_board[closest_teammate.id].add(f"GOLD:{coord[0]},{coord[1]}")
                 return self.get_move_towards(self.goal)
 
-        # If at a goal (e.g. gold location from previous turn), try to pick up
+        # If at a goal, try to pick up
         if self.goal and self.current_coord == self.goal:
             return "PICK_UP"
 
