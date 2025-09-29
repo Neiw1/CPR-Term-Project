@@ -6,7 +6,7 @@ HEIGHT = 20
 P_GOLD = 0.1
 MAX_GOLD = 3
 N_ROBOTS = 10
-TURNS = 150
+TURNS = 10000
 
 def main():
     world = World(WIDTH, HEIGHT, P_GOLD, MAX_GOLD, N_ROBOTS)
@@ -23,7 +23,7 @@ def main():
         print()
         world.next_turn()
         print("-" * 150)
-        time.sleep(0.8)
+        # time.sleep(0.8)
 
     print("Final Grid")
     world.print_grid()

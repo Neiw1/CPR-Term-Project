@@ -18,6 +18,17 @@ class Robot:
         self.goal = None
         self.role = None # 'SEEKER', 'HELPER', 'CARRIER'
 
+        # Paxos attributes
+        self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
+        self.proposal_number = 0
+        self.last_promised_proposal = None
+        self.accepted_proposal_number = None
+        self.accepted_value = None
+        
+        # Temporary attributes for a single Paxos round
+        self.proposals = {}  # To store received proposals
+        self.promises = []  # To store received promises
+
     def calculate_distance(self, coord1, coord2):
         return abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1])
 
@@ -55,52 +66,92 @@ class Robot:
         return closest_teammate
 
     def make_decision(self, robot_manager):
-        # 1. Role-based logic
+        # 1. Process incoming messages
+        self.process_messages(robot_manager)
+
+        # 2. Role-based logic for executing accepted plans
         if self.role == 'CARRIER':
             self.goal = self.deposit_box_coord
             if self.current_coord == self.deposit_box_coord:
-                return "PICK_UP" # Signal to drop at deposit
+                return "PICK_UP"  # This signals to drop the gold at the deposit
             return self.get_move_towards(self.goal)
 
         if self.role == 'HELPER':
-            if self.goal and self.current_coord == self.goal:
-                return "PICK_UP"
             if self.goal:
+                if self.current_coord == self.goal:
+                    return "PICK_UP" # This signals to attempt pickup
                 return self.get_move_towards(self.goal)
+            else:
+                # Goal was lost, reset role
+                self.role = None 
 
-        # 2. Check messages
-        for message in list(self.message_board[self.id]):
-            if message.startswith("GOLD:"):
-                parts = message.split(":")
-                coord_parts = parts[1].strip().split(',')
-                gold_coord = (int(coord_parts[0]), int(coord_parts[1]))
-                self.goal = gold_coord
-                self.role = 'HELPER'
-                self.message_board[self.id].remove(message)
-                return self.get_move_towards(self.goal)
+        # 3. Paxos-related actions
+        if self.paxos_role == 'PROPOSER':
+            # If we have a majority of promises, send ACCEPT
+            if len(self.promises) > len(robot_manager.get_robots()) / 2:
+                # Logic to send ACCEPT message
+                for teammate in robot_manager.get_robots():
+                    self.message_board[teammate.id].add(('ACCEPT', self.proposal_number, self.proposals[self.proposal_number]))
+                self.paxos_role = 'IDLE' # Reset after sending
+                self.promises = []
 
-        # 3. If no specific role/task, observe and decide
-        # Look for gold
-        for coord, cell in self.knowledge_base.items():
-            if cell.get_gold_amount():
-                self.goal = coord
-                self.role = 'SEEKER'
-                closest_teammate = self.find_closest_teammate(robot_manager)
-                if closest_teammate:
-                    # Send message to the specific teammate
-                    self.message_board[closest_teammate.id].add(f"GOLD:{coord[0]},{coord[1]}")
-                return self.get_move_towards(self.goal)
+        # 4. Discover and Propose
+        # If idle and sees gold, start a new proposal
+        if self.paxos_role == 'IDLE' and not self.is_carrying:
+            for coord, cell in self.knowledge_base.items():
+                if cell.get_gold_amount():
+                    # Found gold, become a proposer
+                    self.paxos_role = 'PROPOSER'
+                    self.proposal_number += 1 # Increment proposal number
+                    closest_teammate = self.find_closest_teammate(robot_manager)
+                    if closest_teammate:
+                        value = (coord, (self.id, closest_teammate.id))
+                        self.proposals[self.proposal_number] = value
+                        # Send PREPARE message to all teammates
+                        for teammate in robot_manager.get_robots():
+                            self.message_board[teammate.id].add(('PREPARE', self.proposal_number))
+                        # No action this turn, wait for promises
+                        return None 
 
-        # If at a goal, try to pick up
-        if self.goal and self.current_coord == self.goal:
-            return "PICK_UP"
-
-        # If still has a goal from a previous turn
-        if self.goal:
-            return self.get_move_towards(self.goal)
-
-        # 4. Default behavior: explore randomly
+        # 5. Default behavior: explore randomly
         return random.choice(["MOVE", ("TURN", random.choice(["LEFT", "RIGHT", "UP", "DOWN"]))])
+
+    def process_messages(self, robot_manager):
+        my_messages = list(self.message_board[self.id])
+        for msg in my_messages:
+            msg_type = msg[0]
+
+            if msg_type == 'PREPARE':
+                _, proposal_num = msg
+                if proposal_num > self.proposal_number:
+                    self.proposal_number = proposal_num
+                    self.paxos_role = 'ACCEPTOR'
+                    # Send PROMISE
+                    # This is a simplified promise, a real implementation would check for previously accepted values
+                    for teammate in robot_manager.get_robots():
+                        if teammate.paxos_role == 'PROPOSER': # Simplified: send only to proposers
+                            self.message_board[teammate.id].add(('PROMISE', proposal_num, self.id))
+
+            elif msg_type == 'PROMISE':
+                _, proposal_num, from_id = msg
+                if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
+                    self.promises.append(from_id)
+
+            elif msg_type == 'ACCEPT':
+                _, proposal_num, value = msg
+                if self.paxos_role == 'ACCEPTOR' and proposal_num == self.proposal_number:
+                    self.accepted_proposal_number = proposal_num
+                    self.accepted_value = value
+                    self.paxos_role = 'IDLE' # Reset
+                    # Acknowledge acceptance
+                    # self.message_board[...].add(('ACCEPTED', ...))
+
+                    # If this robot is part of the accepted plan, change role
+                    if self.id in self.accepted_value[1]:
+                        self.goal = self.accepted_value[0]
+                        self.role = 'HELPER' # Change role to act on the plan
+
+            self.message_board[self.id].remove(msg)
 
 
     def take_action(self, action, grid):
