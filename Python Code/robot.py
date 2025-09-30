@@ -13,6 +13,7 @@ class Robot:
         self.turn_count = 0
         self.observable_cells = []
         self.knowledge_base = {}
+        self.teammate_knowledge_base = {}
         self.message_board = message_board
         self.deposit_box_coord = deposit_box_coord
         self.goal = None
@@ -56,17 +57,20 @@ class Robot:
                 else: return ('TURN', 'DOWN')
 
     def find_closest_teammate(self, robot_manager):
-        closest_teammate = None
+        closest_teammate_id = None
         min_dist = float('inf')
-        for teammate in robot_manager.get_robots():
-            if teammate.id != self.id and not teammate.is_carrying:
-                dist = self.calculate_distance(self.current_coord, teammate.current_coord)
+        for teammate_id, status in self.teammate_knowledge_base.items():
+            if teammate_id != self.id and not status['is_carrying']:
+                dist = self.calculate_distance(self.current_coord, status['coord'])
                 if dist < min_dist:
                     min_dist = dist
-                    closest_teammate = teammate
-        return closest_teammate
+                    closest_teammate_id = teammate_id
+        return closest_teammate_id
 
     def make_decision(self, robot_manager):
+        # 0. Broadcast status to teammates
+        self.broadcast_status(robot_manager)
+        
         # 1. Process incoming messages
         self.process_messages(robot_manager)
 
@@ -105,13 +109,13 @@ class Robot:
                     self.paxos_role = 'PROPOSER'
                     self.proposal_number += 1 # Increment proposal number
                     self.last_proposal_turn = self.turn_count
-                    closest_teammate = self.find_closest_teammate(robot_manager)
-                    if closest_teammate:
-                        value = (coord, (self.id, closest_teammate.id))
+                    closest_teammate_id = self.find_closest_teammate(robot_manager)
+                    if closest_teammate_id:
+                        value = (coord, (self.id, closest_teammate_id))
                         self.proposals[self.proposal_number] = value
                         # Send PREPARE message to all teammates
                         for teammate in robot_manager.get_robots():
-                            self.message_board[teammate.id].add(('PREPARE', self.proposal_number))
+                            self.message_board[teammate.id].add(('PREPARE', self.proposal_number, self.id))
                         # No action this turn, wait for promises
                         return None 
 
@@ -140,22 +144,35 @@ class Robot:
             msg_type = msg[0]
 
             if msg_type == 'PREPARE':
-                _, proposal_num = msg
+                _, proposal_num, proposer_id = msg
                 if proposal_num > self.proposal_number:
                     self.proposal_number = proposal_num
                     self.paxos_role = 'ACCEPTOR'
                     # Send PROMISE
-                    # This is a simplified promise, a real implementation would check for previously accepted values
-                    for teammate in robot_manager.get_robots():
-                        if teammate.paxos_role == 'PROPOSER': # Simplified: send only to proposers
-                            self.message_board[teammate.id].add(('PROMISE', proposal_num, self.id))
+                    self.message_board[proposer_id].add(('PROMISE', proposal_num, self.id))
 
             elif msg_type == 'PROMISE':
                 _, proposal_num, from_id = msg
                 if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
                     self.promises.append(from_id)
+            
+            elif msg_type == 'STATUS':
+                _, status_info_tuple = msg
+                status_info = dict(status_info_tuple)
+                self.teammate_knowledge_base[status_info['id']] = status_info
 
             self.message_board[self.id].remove(msg)
+    
+    def broadcast_status(self, robot_manager):
+        status_info = {
+            'id': self.id,
+            'coord': self.current_coord,
+            'is_carrying': self.is_carrying,
+        }
+        for teammate in robot_manager.get_robots():
+            if teammate.id != self.id:
+                self.message_board[teammate.id].add(('STATUS', tuple(status_info.items())))
+
 
 
     def take_action(self, action, grid):
