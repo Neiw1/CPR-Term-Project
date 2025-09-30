@@ -22,6 +22,7 @@ class Robot:
         # Paxos attributes
         self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
         self.proposal_number = 0
+        self.promised_proposer_id = ''
         self.last_promised_proposal = None
         self.accepted_proposal_number = None
         self.accepted_value = None
@@ -145,8 +146,12 @@ class Robot:
 
             if msg_type == 'PREPARE':
                 _, proposal_num, proposer_id = msg
-                if proposal_num > self.proposal_number:
+                if proposer_id == self.id:
+                    continue
+                if proposal_num > self.proposal_number or \
+                   (proposal_num == self.proposal_number and proposer_id > self.promised_proposer_id):
                     self.proposal_number = proposal_num
+                    self.promised_proposer_id = proposer_id
                     self.paxos_role = 'ACCEPTOR'
                     # Send PROMISE
                     self.message_board[proposer_id].add(('PROMISE', proposal_num, self.id))
