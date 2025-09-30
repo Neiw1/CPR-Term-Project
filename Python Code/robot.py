@@ -24,6 +24,7 @@ class Robot:
         self.last_promised_proposal = None
         self.accepted_proposal_number = None
         self.accepted_value = None
+        self.last_proposal_turn = 0
         
         # Temporary attributes for a single Paxos round
         self.proposals = {}  # To store received proposals
@@ -97,12 +98,13 @@ class Robot:
 
         # 4. Discover and Propose
         # If idle and sees gold, start a new proposal
-        if self.paxos_role == 'IDLE' and not self.is_carrying:
+        if self.paxos_role == 'IDLE' and not self.is_carrying and (self.turn_count - self.last_proposal_turn) > 5:
             for coord, cell in self.knowledge_base.items():
                 if cell.get_gold_amount():
                     # Found gold, become a proposer
                     self.paxos_role = 'PROPOSER'
                     self.proposal_number += 1 # Increment proposal number
+                    self.last_proposal_turn = self.turn_count
                     closest_teammate = self.find_closest_teammate(robot_manager)
                     if closest_teammate:
                         value = (coord, (self.id, closest_teammate.id))
@@ -118,7 +120,23 @@ class Robot:
 
     def process_messages(self, robot_manager):
         my_messages = list(self.message_board[self.id])
-        for msg in my_messages:
+        accept_messages = [msg for msg in my_messages if msg[0] == 'ACCEPT']
+        other_messages = [msg for msg in my_messages if msg[0] != 'ACCEPT']
+
+        for msg in accept_messages:
+            _, proposal_num, value = msg
+            if self.paxos_role == 'ACCEPTOR' and proposal_num == self.proposal_number:
+                self.accepted_proposal_number = proposal_num
+                self.accepted_value = value
+                self.paxos_role = 'IDLE' # Reset
+
+                # If this robot is part of the accepted plan, change role
+                if self.id in self.accepted_value[1]:
+                    self.goal = self.accepted_value[0]
+                    self.role = 'HELPER' # Change role to act on the plan
+            self.message_board[self.id].remove(msg)
+
+        for msg in other_messages:
             msg_type = msg[0]
 
             if msg_type == 'PREPARE':
@@ -136,20 +154,6 @@ class Robot:
                 _, proposal_num, from_id = msg
                 if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
                     self.promises.append(from_id)
-
-            elif msg_type == 'ACCEPT':
-                _, proposal_num, value = msg
-                if self.paxos_role == 'ACCEPTOR' and proposal_num == self.proposal_number:
-                    self.accepted_proposal_number = proposal_num
-                    self.accepted_value = value
-                    self.paxos_role = 'IDLE' # Reset
-                    # Acknowledge acceptance
-                    # self.message_board[...].add(('ACCEPTED', ...))
-
-                    # If this robot is part of the accepted plan, change role
-                    if self.id in self.accepted_value[1]:
-                        self.goal = self.accepted_value[0]
-                        self.role = 'HELPER' # Change role to act on the plan
 
             self.message_board[self.id].remove(msg)
 
