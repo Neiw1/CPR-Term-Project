@@ -67,15 +67,34 @@ class World:
     def check_pickup_logic(self):
         for coord, robots in self.pickup_check.items():
             cell = self.grid.get_cell(coord)
-            if cell and cell.get_gold_amount():
-                reds = [r for r in robots if r[1] == "RED"]
-                blues = [r for r in robots if r[1] == "BLUE"]
+            if not cell:
+                continue
 
-                if len(reds) == 2:
+            gold_amount = cell.get_gold_amount() or 0
+            if gold_amount == 0:
+                continue
+
+            reds = [r for r in robots if r[1] == "RED"]
+            blues = [r for r in robots if r[1] == "BLUE"]
+
+            red_pair_present = len(reds) == 2
+            blue_pair_present = len(blues) == 2
+
+            if red_pair_present and blue_pair_present:
+                if gold_amount >= 2:
                     if self.red_team.pickup_gold(reds[0][0], reds[1][0]):
                         cell.remove_gold()
-                        # print(f"{reds[0][0]} and {reds[1][0]} has SUCCESSFULLY picked up a GOLD BAR")
-                if len(blues) == 2:
+                    if self.blue_team.pickup_gold(blues[0][0], blues[1][0]):
+                        cell.remove_gold()
+            
+            elif red_pair_present:
+                if gold_amount >= 1:
+                    if self.red_team.pickup_gold(reds[0][0], reds[1][0]):
+                        cell.remove_gold()
+                        # print(f"{reds[0][0]} and {reds[1][0]} has SUCCESSFULLY picked up a GOLD BAR")  
+
+            elif blue_pair_present:
+                if gold_amount >= 1:
                     if self.blue_team.pickup_gold(blues[0][0], blues[1][0]):
                         cell.remove_gold()
                         # print(f"{blues[0][0]} and {blues[1][0]} has SUCCESSFULLY picked up a GOLD BAR")
