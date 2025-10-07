@@ -17,9 +17,9 @@ class Robot:
         self.message_board = message_board
         self.deposit_box_coord = deposit_box_coord
         self.goal = None
-        self.role = None # 'SEEKER', 'HELPER', 'CARRIER'
+        self.role = None # SEEKER, HELPER, CARRIER
 
-        # Paxos attributes
+        # For Paxos
         self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
         self.proposal_number = 0
         self.promised_proposer_id = ''
@@ -28,9 +28,8 @@ class Robot:
         self.accepted_value = None
         self.last_proposal_turn = 0
         
-        # Temporary attributes for a single Paxos round
-        self.proposals = {}  # To store received proposals
-        self.promises = []  # To store received promises
+        self.proposals = {}
+        self.promises = []
 
     def calculate_distance(self, coord1, coord2):
         return abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1])
@@ -69,36 +68,32 @@ class Robot:
         return closest_teammate_id
 
     def make_decision(self, robot_manager):
-        # 0. Broadcast status to teammates
+        # 1. Broadcast and process status
         self.broadcast_status(robot_manager)
-        
-        # 1. Process incoming messages
         self.process_messages(robot_manager)
 
-        # 2. Role-based logic for executing accepted plans
+        # 2. Role-based logic
         if self.role == 'CARRIER':
             self.goal = self.deposit_box_coord
             if self.current_coord == self.deposit_box_coord:
-                return "PICK_UP"  # This signals to drop the gold at the deposit
+                return "PICK_UP"
             return self.get_move_towards(self.goal)
 
         if self.role == 'HELPER':
             if self.goal:
                 if self.current_coord == self.goal:
-                    return "PICK_UP" # This signals to attempt pickup
+                    return "PICK_UP"
                 return self.get_move_towards(self.goal)
             else:
-                # Goal was lost, reset role
                 self.role = None 
 
-        # 3. Paxos-related actions
+        # 3. Paxos
         if self.paxos_role == 'PROPOSER':
-            # If we have a majority of promises, send ACCEPT
+            # If majority agrees, send ACCEPT
             if len(self.promises) > len(robot_manager.get_robots()) / 2:
-                # Logic to send ACCEPT message
                 for teammate in robot_manager.get_robots():
                     self.message_board[teammate.id].add(('ACCEPT', self.proposal_number, self.proposals[self.proposal_number]))
-                self.paxos_role = 'IDLE' # Reset after sending
+                self.paxos_role = 'IDLE' # Reset
                 self.promises = []
 
         # 4. Discover and Propose
@@ -108,19 +103,18 @@ class Robot:
                 if cell.get_gold_amount():
                     # Found gold, become a proposer
                     self.paxos_role = 'PROPOSER'
-                    self.proposal_number += 1 # Increment proposal number
+                    self.proposal_number += 1
                     self.last_proposal_turn = self.turn_count
                     closest_teammate_id = self.find_closest_teammate(robot_manager)
                     if closest_teammate_id:
                         value = (coord, (self.id, closest_teammate_id))
                         self.proposals[self.proposal_number] = value
-                        # Send PREPARE message to all teammates
+                        # Send PREPARE message
                         for teammate in robot_manager.get_robots():
                             self.message_board[teammate.id].add(('PREPARE', self.proposal_number, self.id))
-                        # No action this turn, wait for promises
-                        return None 
+                        return None
 
-        # 5. Default behavior: explore randomly
+        # 5. Explore randomly
         return random.choice(["MOVE", ("TURN", random.choice(["LEFT", "RIGHT", "UP", "DOWN"]))])
 
     def process_messages(self, robot_manager):
@@ -135,10 +129,10 @@ class Robot:
                 self.accepted_value = value
                 self.paxos_role = 'IDLE' # Reset
 
-                # If this robot is part of the accepted plan, change role
+                # Change role to helper if involved
                 if self.id in self.accepted_value[1]:
                     self.goal = self.accepted_value[0]
-                    self.role = 'HELPER' # Change role to act on the plan
+                    self.role = 'HELPER'
             self.message_board[self.id].remove(msg)
 
         for msg in other_messages:
@@ -255,7 +249,7 @@ class Robot:
     def observe(self, grid):
         self.observable_cells = self._get_observable_cells(grid.width, grid.height)
         # print(f"Robot {self.id} at {self.current_coord} facing {self.facing} observes: {self.observable_cells}")
-        self.knowledge_base.clear() # Clear previous observations
+        self.knowledge_base.clear()
         for coord in self.observable_cells:
             cell = grid.get_cell(coord)
             if cell:
