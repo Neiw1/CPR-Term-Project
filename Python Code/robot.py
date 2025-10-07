@@ -1,6 +1,8 @@
 import random
 
 class Robot:
+    PAXOS_TIMEOUT = 10
+
     def __init__(self, id, team, current_coord, facing, message_board, deposit_box_coord):
         self.id = id
         self.team = team
@@ -21,6 +23,7 @@ class Robot:
 
         # For Paxos
         self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
+        self.paxos_turn_timer = 0
         self.proposal_number = 0
         self.promised_proposer_id = ''
         self.last_promised_proposal = None
@@ -68,6 +71,16 @@ class Robot:
         return closest_teammate_id
 
     def make_decision(self, robot_manager):
+        # Paxos Timeout Logic
+        if self.paxos_role != 'IDLE':
+            self.paxos_turn_timer += 1
+            if self.paxos_turn_timer > self.PAXOS_TIMEOUT:
+                self.paxos_role = 'IDLE'
+                self.paxos_turn_timer = 0
+                self.promises = [] # Reset promises if it was a proposer
+        else:
+            self.paxos_turn_timer = 0
+
         # 1. Broadcast and process status
         self.broadcast_status(robot_manager)
         self.process_messages(robot_manager)
