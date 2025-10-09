@@ -23,7 +23,7 @@ def main():
         print()
         world.next_turn()
         print("-" * 150)
-        time.sleep(0.8)
+        # time.sleep(0.8)
 
     print("Final Grid")
     world.print_grid()

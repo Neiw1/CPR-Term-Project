@@ -93,10 +93,26 @@ class Robot:
         if self.role == 'HELPER':
             if self.goal:
                 if self.current_coord == self.goal:
-                    return "PICK_UP"
-                return self.get_move_towards(self.goal)
+                    # Arrived at goal, check for gold.
+                    # Knowledge base is updated in the observe() step before this function is called.
+                    current_cell = self.knowledge_base.get(self.current_coord)
+                    if current_cell and current_cell.get_gold_amount():
+                        # Gold exists, attempt pickup
+                        return "PICK_UP"
+                    else:
+                        # Gold is gone, mission failed. Reset.
+                        print(f"PAXOS: Robot {self.id} mission failed at {self.goal}. Gold is gone.")
+                        self.role = None
+                        self.goal = None
+                        self.paxos_role = 'IDLE' # Reset paxos state as well
+                        # Decide on a new action this turn
+                        return self.make_decision(robot_manager)
+                else:
+                    # Not at goal yet, keep moving
+                    return self.get_move_towards(self.goal)
             else:
-                self.role = None 
+                # No goal, reset role
+                self.role = None
 
         # 3. Paxos
         if self.paxos_role == 'PROPOSER':
@@ -293,8 +309,9 @@ class Robot:
         }
 
         rel_coords = patterns.get(self.facing, [])
+        all_rel_coords = rel_coords + [(0, 0)] # Also observe the current cell
         
-        for dx, dy in rel_coords:
+        for dx, dy in all_rel_coords:
             obs_x, obs_y = x + dx, y + dy
             if 0 <= obs_x < grid_width and 0 <= obs_y < grid_height:
                 observable.append((obs_x, obs_y))
