@@ -293,6 +293,7 @@ class Robot:
             self.pair_id = pair_id
             self.goal = None
             self.role = 'CARRIER'
+            self.facing = 'UP' # Synchronize facing direction to prevent de-sync
 
     def drop_gold(self):
         print(f"{self.id} has DROPPED a GOLD BAR at {self.coord_history[self.turn_count - 1]}")
