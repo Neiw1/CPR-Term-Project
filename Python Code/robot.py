@@ -17,7 +17,7 @@ class Robot:
         self.message_board = message_board
         self.deposit_box_coord = deposit_box_coord
         self.goal = None
-        self.role = None # SEEKER, HELPER, CARRIER
+        self.role = None # SEEKER, HELPER, CARRIER (CARRIER_PREP, CARRIER_ALIGN, CARRIER)
 
         # For Paxos
         self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
@@ -31,6 +31,7 @@ class Robot:
         
         self.proposals = {}
         self.promises = []
+        self.alignment_target = None
 
     def calculate_distance(self, coord1, coord2):
         return abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1])
@@ -85,7 +86,41 @@ class Robot:
         self.broadcast_status(robot_manager)
 
         # 2. Role-based logic
+        if self.role == 'CARRIER_PREP':
+            # Leader (lower ID) calculates and sends alignment direction.
+            # Both robots then wait one turn for the message to be received.
+            if self.id < self.pair_id:
+                # Deterministically calculate best direction based on goal
+                dx = self.deposit_box_coord[0] - self.current_coord[0]
+                dy = self.deposit_box_coord[1] - self.current_coord[1]
+                
+                target_dir = 'UP' # Default
+                if abs(dx) > abs(dy):
+                    target_dir = 'RIGHT' if dx > 0 else 'LEFT'
+                else:
+                    target_dir = 'UP' if dy > 0 else 'DOWN'
+
+                self.alignment_target = target_dir
+                self.message_board[self.pair_id].add(('SET_ALIGN_DIR', target_dir))
+            
+            self.role = 'CARRIER_ALIGN'
+            return None # Do nothing this turn to allow message to be sent/received
+
+        if self.role == 'CARRIER_ALIGN':
+            # Wait until the alignment target is received/set
+            if self.alignment_target is None:
+                return None # Follower waits here for the first turn
+
+            # Now we have a target, turn until we match it
+            if self.facing != self.alignment_target:
+                return ('TURN', self.alignment_target)
+            else:
+                # Alignment complete, promote to CARRIER and move this turn
+                self.role = 'CARRIER'
+                return self.make_decision(robot_manager)
+
         if self.role == 'CARRIER':
+            # This logic is now only executed by fully aligned carriers
             self.goal = self.deposit_box_coord
             if self.current_coord == self.deposit_box_coord:
                 return "PICK_UP"
@@ -236,6 +271,15 @@ class Robot:
             print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
             if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
                 self.promises.append(from_id)
+
+        # Handle alignment messages for carriers
+        for msg in my_messages:
+            if msg[0] == 'SET_ALIGN_DIR':
+                _, direction = msg
+                self.alignment_target = direction
+                if self.role == 'CARRIER_PREP':
+                    self.role = 'CARRIER_ALIGN'
+
         
         # 4. Handle STATUS messages
         for msg in status_messages:
@@ -292,7 +336,8 @@ class Robot:
             self.is_carrying = True
             self.pair_id = pair_id
             self.goal = None
-            self.role = 'CARRIER'
+            self.role = 'CARRIER_PREP'
+            self.alignment_target = None # Reset alignment target
             self.facing = 'UP' # Synchronize facing direction to prevent de-sync
 
     def drop_gold(self):
@@ -322,7 +367,7 @@ class Robot:
         }
 
         rel_coords = patterns.get(self.facing, [])
-        all_rel_coords = rel_coords + [(0, 0)] # Also observe the current cell
+        all_rel_coords = rel_coords + [(0, 0)]
         
         for dx, dy in all_rel_coords:
             obs_x, obs_y = x + dx, y + dy
