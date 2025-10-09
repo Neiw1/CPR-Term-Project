@@ -73,6 +73,7 @@ class Robot:
         if self.paxos_role != 'IDLE':
             self.paxos_turn_timer += 1
             if self.paxos_turn_timer > 10: # Reset if taking too long
+                print(f"PAXOS: Robot {self.id} timed out. Resetting to IDLE.")
                 self.paxos_role = 'IDLE'
                 self.paxos_turn_timer = 0
                 self.promises = []
@@ -81,7 +82,6 @@ class Robot:
 
         # 1. Broadcast and process status
         self.broadcast_status(robot_manager)
-        self.process_messages(robot_manager)
 
         # 2. Role-based logic
         if self.role == 'CARRIER':
@@ -102,8 +102,21 @@ class Robot:
         if self.paxos_role == 'PROPOSER':
             # If majority agrees, send ACCEPT
             if len(self.promises) > len(robot_manager.get_robots()) / 2:
+                print(f"PAXOS: Robot {self.id} has majority of promises. Sending ACCEPT.")
+                accepted_value = self.proposals[self.proposal_number]
                 for teammate in robot_manager.get_robots():
-                    self.message_board[teammate.id].add(('ACCEPT', self.proposal_number, self.proposals[self.proposal_number]))
+                    if teammate.id != self.id:
+                        self.message_board[teammate.id].add(('ACCEPT', self.proposal_number, accepted_value))
+                
+                # Proposer also accepts the value
+                self.accepted_proposal_number = self.proposal_number
+                self.accepted_value = accepted_value
+                print(f"PAXOS: Robot {self.id} has accepted proposal {self.proposal_number}.")
+                if self.id in self.accepted_value[1]:
+                    print(f"PAXOS: Robot {self.id} is now a HELPER.")
+                    self.goal = self.accepted_value[0]
+                    self.role = 'HELPER'
+
                 self.paxos_role = 'IDLE' # Reset
                 self.promises = []
 
@@ -113,6 +126,7 @@ class Robot:
             for coord, cell in self.knowledge_base.items():
                 if cell.get_gold_amount():
                     # Found gold, become a proposer
+                    print(f"PAXOS: Robot {self.id} found gold at {coord} and became a PROPOSER.")
                     self.paxos_role = 'PROPOSER'
                     self.proposal_number += 1
                     self.last_proposal_turn = self.turn_count
@@ -121,40 +135,56 @@ class Robot:
                         value = (coord, (self.id, closest_teammate_id))
                         self.proposals[self.proposal_number] = value
                         # Send PREPARE message
+                        print(f"PAXOS: Robot {self.id} is sending PREPARE for proposal {self.proposal_number}.")
                         for teammate in robot_manager.get_robots():
-                            self.message_board[teammate.id].add(('PREPARE', self.proposal_number, self.id))
+                            if teammate.id != self.id:
+                                self.message_board[teammate.id].add(('PREPARE', self.proposal_number, self.id))
                         return None
 
         # 5. Explore randomly
         return random.choice(["MOVE", ("TURN", random.choice(["LEFT", "RIGHT", "UP", "DOWN"]))])
 
     def process_messages(self, robot_manager):
-        my_messages = list(self.message_board[self.id])
+        if not hasattr(self, 'read_board') or self.id not in self.read_board:
+            return
+        
+        my_messages = list(self.read_board[self.id])
+        self.read_board[self.id].clear()
+
         accept_messages = [msg for msg in my_messages if msg[0] == 'ACCEPT']
         other_messages = [msg for msg in my_messages if msg[0] != 'ACCEPT']
 
         for msg in accept_messages:
             _, proposal_num, value = msg
+            print(f"PAXOS: Robot {self.id} received ACCEPT for proposal {proposal_num} with value {value}.")
             if self.paxos_role == 'ACCEPTOR' and proposal_num == self.proposal_number:
                 self.accepted_proposal_number = proposal_num
                 self.accepted_value = value
+                print(f"PAXOS: Robot {self.id} has accepted proposal {proposal_num}.")
                 self.paxos_role = 'IDLE' # Reset
 
                 # Change role to helper if involved
                 if self.id in self.accepted_value[1]:
+                    print(f"PAXOS: Robot {self.id} is now a HELPER.")
                     self.goal = self.accepted_value[0]
                     self.role = 'HELPER'
-            self.message_board[self.id].remove(msg)
 
         for msg in other_messages:
             msg_type = msg[0]
 
             if msg_type == 'PREPARE':
                 _, proposal_num, proposer_id = msg
+                print(f"PAXOS: Robot {self.id} received PREPARE from {proposer_id} for proposal {proposal_num}.")
                 if proposer_id == self.id:
                     continue
+
+                # If I am a proposer, I should only yield to higher proposal numbers.
+                if self.paxos_role == 'PROPOSER' and proposal_num <= self.proposal_number:
+                    continue
+
                 if proposal_num > self.proposal_number or \
                    (proposal_num == self.proposal_number and proposer_id > self.promised_proposer_id):
+                    print(f"PAXOS: Robot {self.id} is promising for proposal {proposal_num}.")
                     self.proposal_number = proposal_num
                     self.promised_proposer_id = proposer_id
                     self.paxos_role = 'ACCEPTOR'
@@ -163,6 +193,7 @@ class Robot:
 
             elif msg_type == 'PROMISE':
                 _, proposal_num, from_id = msg
+                print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
                 if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
                     self.promises.append(from_id)
             
@@ -170,8 +201,6 @@ class Robot:
                 _, status_info_tuple = msg
                 status_info = dict(status_info_tuple)
                 self.teammate_knowledge_base[status_info['id']] = status_info
-
-            self.message_board[self.id].remove(msg)
     
     def broadcast_status(self, robot_manager):
         status_info = {

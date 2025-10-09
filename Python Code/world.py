@@ -13,6 +13,13 @@ class World:
 
         self.red_deposit_box, self.blue_deposit_box = self._spawn_deposit_boxes()
 
+        # Double-buffer message boards
+        self.red_board_1 = {chr(ord('A') + i): set() for i in range(n_robots)}
+        self.red_board_2 = {chr(ord('A') + i): set() for i in range(n_robots)}
+        self.blue_board_1 = {chr(ord('a') + i): set() for i in range(n_robots)}
+        self.blue_board_2 = {chr(ord('a') + i): set() for i in range(n_robots)}
+        self.turn_count = 0
+
         self.red_team = self._spawn_robots(n_robots, "RED")
         self.blue_team = self._spawn_robots(n_robots, "BLUE")
 
@@ -30,6 +37,8 @@ class World:
 
     def _spawn_robots(self, n_robots, team):
         robots = {}
+        # The message_board passed to Robot is now just a placeholder
+        # The actual boards are set in next_turn
         message_board = {}
         first_id = 'A' if team == "RED" else 'a'
         deposit_box_coord = self.red_deposit_box if team == "RED" else self.blue_deposit_box
@@ -44,6 +53,36 @@ class World:
         return RobotManager(team, robots, message_board)
 
     def next_turn(self):
+        self.turn_count += 1
+
+        # Determine read/write boards for this turn
+        if self.turn_count % 2 == 1:
+            red_read_board, red_write_board = self.red_board_1, self.red_board_2
+            blue_read_board, blue_write_board = self.blue_board_1, self.blue_board_2
+        else:
+            red_read_board, red_write_board = self.red_board_2, self.red_board_1
+            blue_read_board, blue_write_board = self.blue_board_2, self.blue_board_1
+
+        # Clear write boards before use
+        for robot_id in red_write_board:
+            red_write_board[robot_id].clear()
+        for robot_id in blue_write_board:
+            blue_write_board[robot_id].clear()
+
+        # Set the boards for each robot
+        for robot in self.red_team.get_robots():
+            robot.read_board = red_read_board
+            robot.message_board = red_write_board # message_board is the write board
+        for robot in self.blue_team.get_robots():
+            robot.read_board = blue_read_board
+            robot.message_board = blue_write_board
+
+        # Process messages from the previous turn
+        for robot in self.red_team.get_robots():
+            robot.process_messages(self.red_team)
+        for robot in self.blue_team.get_robots():
+            robot.process_messages(self.blue_team)
+
         self.pickup_check = {}
         self.make_decisions_and_take_actions(self.blue_team)
         self.make_decisions_and_take_actions(self.red_team)
