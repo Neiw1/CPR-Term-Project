@@ -23,7 +23,7 @@ class Robot:
         self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
         self.paxos_turn_timer = 0
         self.proposal_number = 0
-        self.promised_proposer_id = ''
+        self.promised_proposer_id = '~'
         self.last_promised_proposal = None
         self.accepted_proposal_number = None
         self.accepted_value = None
@@ -151,9 +151,45 @@ class Robot:
         my_messages = list(self.read_board[self.id])
         self.read_board[self.id].clear()
 
+        # Separate messages by type
+        prepare_messages = [msg for msg in my_messages if msg[0] == 'PREPARE']
         accept_messages = [msg for msg in my_messages if msg[0] == 'ACCEPT']
-        other_messages = [msg for msg in my_messages if msg[0] != 'ACCEPT']
+        promise_messages = [msg for msg in my_messages if msg[0] == 'PROMISE']
+        status_messages = [msg for msg in my_messages if msg[0] == 'STATUS']
 
+        # 1. Handle PREPAREs: find the single best proposal and send one promise
+        best_incoming_prepare = None
+        for msg in prepare_messages:
+            if msg[2] == self.id: continue # Ignore self
+            
+            if best_incoming_prepare is None:
+                best_incoming_prepare = msg
+            else:
+                # Higher proposal number wins
+                if msg[1] > best_incoming_prepare[1]:
+                    best_incoming_prepare = msg
+                # Tie-break with proposer ID (lower is better as per user)
+                elif msg[1] == best_incoming_prepare[1] and msg[2] < best_incoming_prepare[2]:
+                    best_incoming_prepare = msg
+        
+        if best_incoming_prepare:
+            proposal_num, proposer_id = best_incoming_prepare[1], best_incoming_prepare[2]
+            print(f"PAXOS: Robot {self.id} received PREPARE from {proposer_id} for proposal {proposal_num}.")
+
+            # If I am a proposer, I only yield to strictly higher proposal numbers.
+            if self.paxos_role == 'PROPOSER' and proposal_num <= self.proposal_number:
+                pass # Do nothing, stick to my own proposal
+            # Otherwise, check if I should promise the best incoming proposal.
+            elif proposal_num > self.proposal_number or \
+               (proposal_num == self.proposal_number and proposer_id < self.promised_proposer_id):
+                
+                print(f"PAXOS: Robot {self.id} is promising for proposal {proposal_num}.")
+                self.proposal_number = proposal_num
+                self.promised_proposer_id = proposer_id
+                self.paxos_role = 'ACCEPTOR'
+                self.message_board[proposer_id].add(('PROMISE', proposal_num, self.id))
+
+        # 2. Handle ACCEPT messages
         for msg in accept_messages:
             _, proposal_num, value = msg
             print(f"PAXOS: Robot {self.id} received ACCEPT for proposal {proposal_num} with value {value}.")
@@ -163,44 +199,23 @@ class Robot:
                 print(f"PAXOS: Robot {self.id} has accepted proposal {proposal_num}.")
                 self.paxos_role = 'IDLE' # Reset
 
-                # Change role to helper if involved
                 if self.id in self.accepted_value[1]:
                     print(f"PAXOS: Robot {self.id} is now a HELPER.")
                     self.goal = self.accepted_value[0]
                     self.role = 'HELPER'
 
-        for msg in other_messages:
-            msg_type = msg[0]
-
-            if msg_type == 'PREPARE':
-                _, proposal_num, proposer_id = msg
-                print(f"PAXOS: Robot {self.id} received PREPARE from {proposer_id} for proposal {proposal_num}.")
-                if proposer_id == self.id:
-                    continue
-
-                # If I am a proposer, I should only yield to higher proposal numbers.
-                if self.paxos_role == 'PROPOSER' and proposal_num <= self.proposal_number:
-                    continue
-
-                if proposal_num > self.proposal_number or \
-                   (proposal_num == self.proposal_number and proposer_id > self.promised_proposer_id):
-                    print(f"PAXOS: Robot {self.id} is promising for proposal {proposal_num}.")
-                    self.proposal_number = proposal_num
-                    self.promised_proposer_id = proposer_id
-                    self.paxos_role = 'ACCEPTOR'
-                    # Send PROMISE
-                    self.message_board[proposer_id].add(('PROMISE', proposal_num, self.id))
-
-            elif msg_type == 'PROMISE':
-                _, proposal_num, from_id = msg
-                print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
-                if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
-                    self.promises.append(from_id)
-            
-            elif msg_type == 'STATUS':
-                _, status_info_tuple = msg
-                status_info = dict(status_info_tuple)
-                self.teammate_knowledge_base[status_info['id']] = status_info
+        # 3. Handle PROMISE messages
+        for msg in promise_messages:
+            _, proposal_num, from_id = msg
+            print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
+            if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
+                self.promises.append(from_id)
+        
+        # 4. Handle STATUS messages
+        for msg in status_messages:
+            _, status_info_tuple = msg
+            status_info = dict(status_info_tuple)
+            self.teammate_knowledge_base[status_info['id']] = status_info
     
     def broadcast_status(self, robot_manager):
         status_info = {

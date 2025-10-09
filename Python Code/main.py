@@ -6,7 +6,7 @@ HEIGHT = 20
 P_GOLD = 0.1
 MAX_GOLD = 3
 N_ROBOTS = 10
-TURNS = 5000
+TURNS = 1000
 
 def main():
     world = World(WIDTH, HEIGHT, P_GOLD, MAX_GOLD, N_ROBOTS)
