@@ -141,6 +141,15 @@ class Robot:
         if self.paxos_role == 'IDLE' and not self.is_carrying and (self.turn_count - self.last_proposal_turn) > 5:
             for coord, cell in self.knowledge_base.items():
                 if cell.get_gold_amount():
+                    # Check if this gold is already being targeted by other helpers
+                    helpers_on_this_goal = 0
+                    for teammate_status in self.teammate_knowledge_base.values():
+                        if teammate_status.get('role') == 'HELPER' and teammate_status.get('goal') == coord:
+                            helpers_on_this_goal += 1
+                    
+                    if helpers_on_this_goal >= 2:
+                        continue # Skip this gold, it's already being handled
+
                     # Found gold, become a proposer
                     print(f"PAXOS: Robot {self.id} found gold at {coord} and became a PROPOSER.")
                     self.paxos_role = 'PROPOSER'
@@ -155,7 +164,7 @@ class Robot:
                         for teammate in robot_manager.get_robots():
                             if teammate.id != self.id:
                                 self.message_board[teammate.id].add(('PREPARE', self.proposal_number, self.id))
-                        return None
+                        return None # Only propose for one gold find per turn
 
         # 5. Explore randomly
         return random.choice(["MOVE", ("TURN", random.choice(["LEFT", "RIGHT", "UP", "DOWN"]))])
@@ -238,6 +247,8 @@ class Robot:
             'id': self.id,
             'coord': self.current_coord,
             'is_carrying': self.is_carrying,
+            'role': self.role,
+            'goal': self.goal,
         }
         for teammate in robot_manager.get_robots():
             if teammate.id != self.id:
