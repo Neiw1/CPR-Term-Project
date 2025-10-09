@@ -61,7 +61,8 @@ class Robot:
         closest_teammate_id = None
         min_dist = float('inf')
         for teammate_id, status in self.teammate_knowledge_base.items():
-            if teammate_id != self.id and not status['is_carrying']:
+            # Only consider teammates that are IDLE (role is None)
+            if teammate_id != self.id and status.get('role') is None:
                 dist = self.calculate_distance(self.current_coord, status['coord'])
                 if dist < min_dist:
                     min_dist = dist
