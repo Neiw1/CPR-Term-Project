@@ -17,7 +17,7 @@ class Robot:
         self.message_board = message_board
         self.deposit_box_coord = deposit_box_coord
         self.goal = None
-        self.role = None # SEEKER, HELPER, CARRIER
+        self.role = None # HELPER, CARRIER
 
         # For Paxos
         self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
@@ -27,7 +27,7 @@ class Robot:
         self.last_promised_proposal = None
         self.accepted_proposal_number = None
         self.accepted_value = None
-        self.last_proposal_turn = 0
+        self.last_proposal_turn = -3 # Start proposing after 3 turns at the start
         
         self.proposals = {}
         self.promises = []
@@ -61,7 +61,7 @@ class Robot:
         closest_teammate_id = None
         min_dist = float('inf')
         for teammate_id, status in self.teammate_knowledge_base.items():
-            # Only consider teammates that are IDLE (role is None)
+            # Only consider teammates without a role as partner
             if teammate_id != self.id and status.get('role') is None:
                 dist = self.calculate_distance(self.current_coord, status['coord'])
                 if dist < min_dist:
@@ -70,10 +70,26 @@ class Robot:
         return closest_teammate_id
 
     def make_decision(self, robot_manager):
-        # Paxos Timeout Logic
+        # If stuck for more than 20 turns, reset
+        if len(self.action_history) >= 20:
+            recent_actions = self.action_history[-20:]
+            if recent_actions.count("PICK_UP") == 20:
+                print(f"⚠️ TIMEOUT: Robot {self.id} stuck doing PICK_UP for 20+ turns. Resetting.")
+                
+                if self.is_carrying:
+                    self.is_carrying = False
+                    self.pair_id = None
+                
+                self.role = None
+                self.goal = None
+                self.paxos_role = 'IDLE'
+                self.paxos_turn_timer = 0
+                self.promises = []
+        
+        # Timeout
         if self.paxos_role != 'IDLE':
             self.paxos_turn_timer += 1
-            if self.paxos_turn_timer > 10: # Reset if taking too long
+            if self.paxos_turn_timer > 10:
                 print(f"PAXOS: Robot {self.id} timed out. Resetting to IDLE.")
                 self.paxos_role = 'IDLE'
                 self.paxos_turn_timer = 0
@@ -94,25 +110,19 @@ class Robot:
         if self.role == 'HELPER':
             if self.goal:
                 if self.current_coord == self.goal:
-                    # Arrived at goal, check for gold.
-                    # Knowledge base is updated in the observe() step before this function is called.
                     current_cell = self.knowledge_base.get(self.current_coord)
                     if current_cell and current_cell.get_gold_amount():
-                        # Gold exists, attempt pickup
                         return "PICK_UP"
                     else:
-                        # Gold is gone, mission failed. Reset.
+                        # Gold is already gone
                         print(f"PAXOS: Robot {self.id} mission failed at {self.goal}. Gold is gone.")
                         self.role = None
                         self.goal = None
-                        self.paxos_role = 'IDLE' # Reset paxos state as well
-                        # Decide on a new action this turn
+                        self.paxos_role = 'IDLE'
                         return self.make_decision(robot_manager)
                 else:
-                    # Not at goal yet, keep moving
                     return self.get_move_towards(self.goal)
             else:
-                # No goal, reset role
                 self.role = None
 
         # 3. Paxos
@@ -125,7 +135,7 @@ class Robot:
                     if teammate.id != self.id:
                         self.message_board[teammate.id].add(('ACCEPT', self.proposal_number, accepted_value))
                 
-                # Proposer also accepts the value
+                # Proposer accpets
                 self.accepted_proposal_number = self.proposal_number
                 self.accepted_value = accepted_value
                 print(f"PAXOS: Robot {self.id} has accepted proposal {self.proposal_number}.")
@@ -142,14 +152,13 @@ class Robot:
         if self.paxos_role == 'IDLE' and not self.is_carrying and (self.turn_count - self.last_proposal_turn) > 5:
             for coord, cell in self.knowledge_base.items():
                 if cell.get_gold_amount():
-                    # Check if this gold is already being targeted by other helpers
                     helpers_on_this_goal = 0
                     for teammate_status in self.teammate_knowledge_base.values():
                         if teammate_status.get('role') == 'HELPER' and teammate_status.get('goal') == coord:
                             helpers_on_this_goal += 1
                     
                     if helpers_on_this_goal >= 2:
-                        continue # Skip this gold, it's already being handled
+                        continue
 
                     # Found gold, become a proposer
                     print(f"PAXOS: Robot {self.id} found gold at {coord} and became a PROPOSER.")
@@ -165,7 +174,7 @@ class Robot:
                         for teammate in robot_manager.get_robots():
                             if teammate.id != self.id:
                                 self.message_board[teammate.id].add(('PREPARE', self.proposal_number, self.id))
-                        return None # Only propose for one gold find per turn
+                        return None
 
         # 5. Explore randomly
         return random.choice(["MOVE", ("TURN", random.choice(["LEFT", "RIGHT", "UP", "DOWN"]))])
@@ -177,16 +186,15 @@ class Robot:
         my_messages = list(self.read_board[self.id])
         self.read_board[self.id].clear()
 
-        # Separate messages by type
         prepare_messages = [msg for msg in my_messages if msg[0] == 'PREPARE']
         accept_messages = [msg for msg in my_messages if msg[0] == 'ACCEPT']
         promise_messages = [msg for msg in my_messages if msg[0] == 'PROMISE']
         status_messages = [msg for msg in my_messages if msg[0] == 'STATUS']
 
-        # 1. Handle PREPAREs: find the single best proposal and send one promise
+        # Handle PREPAREs: send promise to the highest proposal number
         best_incoming_prepare = None
         for msg in prepare_messages:
-            if msg[2] == self.id: continue # Ignore self
+            if msg[2] == self.id: continue
             
             if best_incoming_prepare is None:
                 best_incoming_prepare = msg
@@ -194,7 +202,7 @@ class Robot:
                 # Higher proposal number wins
                 if msg[1] > best_incoming_prepare[1]:
                     best_incoming_prepare = msg
-                # Tie-break with proposer ID (lower is better as per user)
+                # Tie-break with proposer ID (A > B)
                 elif msg[1] == best_incoming_prepare[1] and msg[2] < best_incoming_prepare[2]:
                     best_incoming_prepare = msg
         
@@ -202,10 +210,8 @@ class Robot:
             proposal_num, proposer_id = best_incoming_prepare[1], best_incoming_prepare[2]
             print(f"PAXOS: Robot {self.id} received PREPARE from {proposer_id} for proposal {proposal_num}.")
 
-            # If I am a proposer, I only yield to strictly higher proposal numbers.
             if self.paxos_role == 'PROPOSER' and proposal_num <= self.proposal_number:
-                pass # Do nothing, stick to my own proposal
-            # Otherwise, check if I should promise the best incoming proposal.
+                pass
             elif proposal_num > self.proposal_number or \
                (proposal_num == self.proposal_number and proposer_id < self.promised_proposer_id):
                 
@@ -215,7 +221,7 @@ class Robot:
                 self.paxos_role = 'ACCEPTOR'
                 self.message_board[proposer_id].add(('PROMISE', proposal_num, self.id))
 
-        # 2. Handle ACCEPT messages
+        # Handle ACCEPT messages
         for msg in accept_messages:
             _, proposal_num, value = msg
             print(f"PAXOS: Robot {self.id} received ACCEPT for proposal {proposal_num} with value {value}.")
@@ -230,14 +236,14 @@ class Robot:
                     self.goal = self.accepted_value[0]
                     self.role = 'HELPER'
 
-        # 3. Handle PROMISE messages
+        # Handle PROMISE messages
         for msg in promise_messages:
             _, proposal_num, from_id = msg
             print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
             if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
                 self.promises.append(from_id)
         
-        # 4. Handle STATUS messages
+        # Handle STATUS messages
         for msg in status_messages:
             _, status_info_tuple = msg
             status_info = dict(status_info_tuple)
@@ -321,7 +327,7 @@ class Robot:
         }
 
         rel_coords = patterns.get(self.facing, [])
-        all_rel_coords = rel_coords + [(0, 0)] # Also observe the current cell
+        all_rel_coords = rel_coords + [(0, 0)]
         
         for dx, dy in all_rel_coords:
             obs_x, obs_y = x + dx, y + dy
