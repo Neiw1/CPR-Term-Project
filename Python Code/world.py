@@ -13,6 +13,11 @@ class World:
 
         self.red_deposit_box, self.blue_deposit_box = self._spawn_deposit_boxes()
 
+        # Message delay system: stores messages that will be delivered in future turns
+        # Format: (delivery_turn, sender_id, message)
+        self.red_message_queue = {chr(ord('A') + i): [] for i in range(n_robots)}
+        self.blue_message_queue = {chr(ord('a') + i): [] for i in range(n_robots)}
+        
         # Double-buffer message boards
         self.red_board_1 = {chr(ord('A') + i): set() for i in range(n_robots)}
         self.red_board_2 = {chr(ord('A') + i): set() for i in range(n_robots)}
@@ -63,11 +68,19 @@ class World:
             red_read_board, red_write_board = self.red_board_2, self.red_board_1
             blue_read_board, blue_write_board = self.blue_board_2, self.blue_board_1
 
-        # Clear write boards before use
+        # Clear write boards and read boards before use
         for robot_id in red_write_board:
             red_write_board[robot_id].clear()
         for robot_id in blue_write_board:
             blue_write_board[robot_id].clear()
+        for robot_id in red_read_board:
+            red_read_board[robot_id].clear()
+        for robot_id in blue_read_board:
+            blue_read_board[robot_id].clear()
+
+        # Deliver messages from the queue that are ready for this turn
+        self._deliver_queued_messages(red_read_board, self.red_message_queue)
+        self._deliver_queued_messages(blue_read_board, self.blue_message_queue)
 
         # Set the boards for each robot
         for robot in self.red_team.get_robots():
@@ -89,6 +102,48 @@ class World:
         self.check_pickup_logic()
         self.check_fumble()
         self.check_drop_deposit()
+        
+        # Collect outgoing messages and add them to the queue with random delays
+        self._collect_and_queue_messages(red_write_board, self.red_message_queue)
+        self._collect_and_queue_messages(blue_write_board, self.blue_message_queue)
+    
+    def _deliver_queued_messages(self, read_board, message_queue):
+        """Deliver messages from the queue that are ready for the current turn."""
+        for robot_id in message_queue:
+            # Filter messages that should be delivered this turn
+            messages_to_deliver = [msg for msg in message_queue[robot_id] if msg[0] <= self.turn_count]
+            remaining_messages = [msg for msg in message_queue[robot_id] if msg[0] > self.turn_count]
+            
+            # Update the queue to remove delivered messages
+            message_queue[robot_id] = remaining_messages
+            
+            # Add delivered messages to read board
+            for delivery_turn, sender_id, message in messages_to_deliver:
+                read_board[robot_id].add(message)
+                # print(f"MSG DELAY: Message {message[0]} from {sender_id} delivered to {robot_id} at turn {self.turn_count} (sent at turn {delivery_turn - random.randint(1, 5)})")
+    
+    def _collect_and_queue_messages(self, write_board, message_queue):
+        """Collect outgoing messages from write board and add them to queue with random delays."""
+        for sender_id in write_board:
+            for message in write_board[sender_id]:
+                # Determine the recipient from the message
+                # Messages are sent to all teammates, so we need to extract recipient info
+                # Since write_board[recipient_id] contains messages for that recipient,
+                # we need to iterate through all recipients
+                pass
+        
+        # The write_board structure is write_board[recipient_id] = set of messages
+        # Each robot adds messages to write_board[teammate_id]
+        # We need to add random delays per recipient
+        for recipient_id in write_board:
+            for message in write_board[recipient_id]:
+                # Random delay between 1 and 5 turns
+                delay = random.randint(1, 5)
+                delivery_turn = self.turn_count + delay
+                # Store as (delivery_turn, sender_id (unknown from this context), message)
+                # Since we don't track sender in write_board, we'll use '?' as placeholder
+                message_queue[recipient_id].append((delivery_turn, '?', message))
+                # print(f"MSG DELAY: Message {message[0]} queued for {recipient_id}, will arrive at turn {delivery_turn} (delay: {delay} turns)")
 
     def make_decisions_and_take_actions(self, robot_manager):
         # print(f"{robot_manager.team} Robots Decisions")

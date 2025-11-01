@@ -1,0 +1,46 @@
+channel at_goal, timeout, fumble, score
+channel pick_up, turn, move
+channel at_deposit
+channel ready : {0..1}.{0..1}
+channel see_partner : {0..1}.{0..1}
+channel see_partner_aligned : {0..1}.{0..1}
+channel see_partner_misaligned : {0..1}.{0..1}
+
+
+HELPER(id, partner) = 
+    at_goal -> WAIT(id, partner)
+
+WAIT(id, partner) = 
+    see_partner.id.partner -> ALIGN(id, partner)
+    []
+    timeout -> IDLE(id)
+
+ALIGN(id, partner) = 
+    see_partner_aligned.id.partner -> pick_up -> CARRIER(id, partner)
+    []
+    see_partner_misaligned.id.partner -> turn -> ALIGN(id, partner)
+
+CARRIER(id, partner) = 
+    at_deposit -> DEPOSIT(id, partner)
+    []
+    move -> CARRIER(id, partner)
+    []
+    fumble -> IDLE(id)
+
+DEPOSIT(id, partner) = 
+    see_partner.id.partner -> score -> IDLE(id)
+    []
+    fumble -> IDLE(id)
+
+IDLE(id) = 
+    timeout -> IDLE(id)
+
+
+ROBOT_0 = HELPER(0, 1)
+ROBOT_1 = HELPER(1, 0)
+
+-- Synchronize only on physical actions
+SYSTEM = ROBOT_0 [|{| pick_up, score, fumble |}|] ROBOT_1
+
+
+assert SYSTEM :[deadlock free [F]]
