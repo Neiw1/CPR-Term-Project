@@ -13,15 +13,15 @@ class Robot:
         self.turn_count = 0
         self.observable_cells = []
         self.knowledge_base = {}
-        self.visible_robots = {}  # {coord: [(robot_id, team, facing), ...]}
+        self.visible_robots = {}
         self.teammate_knowledge_base = {}
         self.message_board = message_board
         self.deposit_box_coord = deposit_box_coord
         self.goal = None
         self.role = None # HELPER, CARRIER
-        self.expected_partner = None  # For coordination at gold pickup
-        self.aligned_for_pickup = False  # Track if aligned with partner
-        self.wait_turn_counter = 0  # Track how long waiting for partner
+        self.expected_partner = None
+        self.aligned_for_pickup = False
+        self.wait_turn_counter = 0
 
         # For Paxos
         self.paxos_role = 'IDLE'  # IDLE, PROPOSER, ACCEPTOR
@@ -31,7 +31,7 @@ class Robot:
         self.last_promised_proposal = None
         self.accepted_proposal_number = None
         self.accepted_value = None
-        self.last_proposal_turn = -3 # Start proposing after 3 turns at the start
+        self.last_proposal_turn = -3
         
         self.proposals = {}
         self.promises = []
@@ -65,7 +65,7 @@ class Robot:
         closest_teammate_id = None
         min_dist = float('inf')
         for teammate_id, status in self.teammate_knowledge_base.items():
-            # Only consider teammates without a role as partner
+            # Only consider teammates without a role
             if teammate_id != self.id and status.get('role') is None:
                 dist = self.calculate_distance(self.current_coord, status['coord'])
                 if dist < min_dist:
@@ -129,18 +129,18 @@ class Robot:
                             
                             if partner_present:
                                 # Partner is here, check alignment
-                                self.wait_turn_counter = 0  # Reset wait counter
+                                self.wait_turn_counter = 0
                                 desired_facing = self._calculate_desired_facing()
                                 
                                 if self.facing != desired_facing:
                                     print(f"COORD: Robot {self.id} aligning to {desired_facing} before pickup")
                                     return ('TURN', desired_facing)
                                 elif partner_facing != desired_facing:
-                                    # Wait for partner to align
+                                    # Align
                                     print(f"COORD: Robot {self.id} waiting for partner {partner_id} to align")
-                                    return None  # Wait
+                                    return None
                                 else:
-                                    # Both aligned, ready to pick up
+                                    # Both aligned
                                     print(f"COORD: Robot {self.id} and partner {partner_id} aligned, picking up gold")
                                     return "PICK_UP"
                             else:
@@ -154,15 +154,13 @@ class Robot:
                                     self.aligned_for_pickup = False
                                     self.wait_turn_counter = 0
                                     return self.make_decision(robot_manager)
-                                # Only print every 5 turns to reduce spam
                                 if self.wait_turn_counter % 5 == 1:
                                     print(f"COORD: Robot {self.id} waiting for partner {partner_id} at {self.goal} ({self.wait_turn_counter}/30)")
-                                return None  # Wait on the gold
+                                return None
                         else:
-                            # No partner info, fallback to immediate pickup
                             return "PICK_UP"
                     else:
-                        # Gold is already gone
+                        # Gold is gone
                         print(f"PAXOS: Robot {self.id} mission failed at {self.goal}. Gold is gone.")
                         self.role = None
                         self.goal = None
@@ -205,7 +203,7 @@ class Robot:
                 self.promises = []
 
         # 4. Discover and Propose
-        # If idle and sees gold, start a new proposal
+        # If sees gold, start a new proposal
         if self.paxos_role == 'IDLE' and not self.is_carrying and (self.turn_count - self.last_proposal_turn) > 5:
             for coord, cell in self.knowledge_base.items():
                 if cell.get_gold_amount():
@@ -248,7 +246,6 @@ class Robot:
         promise_messages = [msg for msg in my_messages if msg[0] == 'PROMISE']
         status_messages = [msg for msg in my_messages if msg[0] == 'STATUS']
 
-        # Handle PREPAREs: send promise to the highest proposal number
         best_incoming_prepare = None
         for msg in prepare_messages:
             if msg[2] == self.id: continue
@@ -256,10 +253,8 @@ class Robot:
             if best_incoming_prepare is None:
                 best_incoming_prepare = msg
             else:
-                # Higher proposal number wins
                 if msg[1] > best_incoming_prepare[1]:
                     best_incoming_prepare = msg
-                # Tie-break with proposer ID (A > B)
                 elif msg[1] == best_incoming_prepare[1] and msg[2] < best_incoming_prepare[2]:
                     best_incoming_prepare = msg
         
@@ -278,7 +273,6 @@ class Robot:
                 self.paxos_role = 'ACCEPTOR'
                 self.message_board[proposer_id].add(('PROMISE', proposal_num, self.id))
 
-        # Handle ACCEPT messages
         for msg in accept_messages:
             _, proposal_num, value = msg
             print(f"PAXOS: Robot {self.id} received ACCEPT for proposal {proposal_num} with value {value}.")
@@ -286,24 +280,21 @@ class Robot:
                 self.accepted_proposal_number = proposal_num
                 self.accepted_value = value
                 print(f"PAXOS: Robot {self.id} has accepted proposal {proposal_num}.")
-                self.paxos_role = 'IDLE' # Reset
+                self.paxos_role = 'IDLE'
 
                 if self.id in self.accepted_value[1]:
                     print(f"PAXOS: Robot {self.id} is now a HELPER.")
                     self.goal = self.accepted_value[0]
                     self.role = 'HELPER'
-                    # Set expected partner
                     robot_ids = self.accepted_value[1]
                     self.expected_partner = robot_ids[0] if robot_ids[1] == self.id else robot_ids[1]
 
-        # Handle PROMISE messages
         for msg in promise_messages:
             _, proposal_num, from_id = msg
             print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
             if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
                 self.promises.append(from_id)
         
-        # Handle STATUS messages
         for msg in status_messages:
             _, status_info_tuple = msg
             status_info = dict(status_info_tuple)
@@ -321,8 +312,6 @@ class Robot:
             if teammate.id != self.id:
                 self.message_board[teammate.id].add(('STATUS', tuple(status_info.items())))
 
-
-
     def take_action(self, action, grid):
         if isinstance(action, tuple) and action[0] == "TURN":
             _, direction = action
@@ -334,10 +323,8 @@ class Robot:
         elif action == "PICK_UP":
             self.action_history.append(action)
         elif action is None:
-            # Waiting for partner or other condition
             self.action_history.append("WAIT")
         else:
-            # Unknown action, record it anyway
             self.action_history.append(action)
         
         self.coord_history.append(self.current_coord)
@@ -409,16 +396,13 @@ class Robot:
         return observable
 
     def _get_partner_from_accepted_value(self):
-        """Extract partner ID from accepted Paxos value."""
         if self.accepted_value and len(self.accepted_value) > 1:
             robot_ids = self.accepted_value[1]
             if isinstance(robot_ids, tuple) and len(robot_ids) == 2:
-                # Return the other robot ID (not self)
                 return robot_ids[0] if robot_ids[1] == self.id else robot_ids[1]
         return None
     
     def _is_partner_at_location(self, partner_id, location):
-        """Check if partner is at the specified location and return their facing direction."""
         if location in self.visible_robots:
             for robot_id, team, facing in self.visible_robots[location]:
                 if robot_id == partner_id:
@@ -426,11 +410,9 @@ class Robot:
         return False, None
     
     def _calculate_desired_facing(self):
-        """Calculate the desired facing direction for carrying gold to deposit."""
         if not self.goal:
             return self.facing
         
-        # Calculate direction from current position to deposit box
         target_coord = self.deposit_box_coord
         x, y = self.current_coord
         target_x, target_y = target_coord
@@ -438,7 +420,6 @@ class Robot:
         dx = target_x - x
         dy = target_y - y
         
-        # Determine the primary direction
         if abs(dx) > abs(dy):
             return 'RIGHT' if dx > 0 else 'LEFT'
         else:
@@ -453,7 +434,6 @@ class Robot:
             cell = grid.get_cell(coord)
             if cell:
                 self.knowledge_base[coord] = cell
-                # Track visible robots in this cell
                 robots_at_coord = []
                 for robot in cell.red_robots:
                     robots_at_coord.append((robot.id, robot.team, robot.facing))
