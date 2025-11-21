@@ -78,7 +78,7 @@ class Robot:
         if len(self.action_history) >= 20:
             recent_actions = self.action_history[-20:]
             if recent_actions.count("PICK_UP") == 20:
-                print(f"⚠️ TIMEOUT: Robot {self.id} stuck doing PICK_UP for 20+ turns. Resetting.")
+                # print(f"TIMEOUT: Robot {self.id} stuck doing PICK_UP for 20+ turns. Resetting.")
                 
                 if self.is_carrying:
                     self.is_carrying = False
@@ -97,7 +97,7 @@ class Robot:
         if self.paxos_role != 'IDLE':
             self.paxos_turn_timer += 1
             if self.paxos_turn_timer > 10:
-                print(f"PAXOS: Robot {self.id} timed out. Resetting to IDLE.")
+                # print(f"PAXOS: Robot {self.id} timed out. Resetting to IDLE.")
                 self.paxos_role = 'IDLE'
                 self.paxos_turn_timer = 0
                 self.promises = []
@@ -133,21 +133,21 @@ class Robot:
                                 desired_facing = self._calculate_desired_facing()
                                 
                                 if self.facing != desired_facing:
-                                    print(f"COORD: Robot {self.id} aligning to {desired_facing} before pickup")
+                                    # print(f"COORD: Robot {self.id} aligning to {desired_facing} before pickup")
                                     return ('TURN', desired_facing)
                                 elif partner_facing != desired_facing:
                                     # Align
-                                    print(f"COORD: Robot {self.id} waiting for partner {partner_id} to align")
+                                    # print(f"COORD: Robot {self.id} waiting for partner {partner_id} to align")
                                     return None
                                 else:
                                     # Both aligned
-                                    print(f"COORD: Robot {self.id} and partner {partner_id} aligned, picking up gold")
+                                    # print(f"COORD: Robot {self.id} and partner {partner_id} aligned, picking up gold")
                                     return "PICK_UP"
                             else:
                                 # Wait for partner to arrive
                                 self.wait_turn_counter += 1
                                 if self.wait_turn_counter > 30:
-                                    print(f"⚠️ WAIT TIMEOUT: Robot {self.id} waited too long for partner {partner_id}. Resetting.")
+                                    # print(f"⚠️ WAIT TIMEOUT: Robot {self.id} waited too long for partner {partner_id}. Resetting.")
                                     self.role = None
                                     self.goal = None
                                     self.expected_partner = None
@@ -155,13 +155,14 @@ class Robot:
                                     self.wait_turn_counter = 0
                                     return self.make_decision(robot_manager)
                                 if self.wait_turn_counter % 5 == 1:
-                                    print(f"COORD: Robot {self.id} waiting for partner {partner_id} at {self.goal} ({self.wait_turn_counter}/30)")
+                                    # print(f"COORD: Robot {self.id} waiting for partner {partner_id} at {self.goal} ({self.wait_turn_counter}/30)")
+                                    pass
                                 return None
                         else:
                             return "PICK_UP"
                     else:
                         # Gold is gone
-                        print(f"PAXOS: Robot {self.id} mission failed at {self.goal}. Gold is gone.")
+                        # print(f"PAXOS: Robot {self.id} mission failed at {self.goal}. Gold is gone.")
                         self.role = None
                         self.goal = None
                         self.expected_partner = None
@@ -181,7 +182,7 @@ class Robot:
         if self.paxos_role == 'PROPOSER':
             # If majority agrees, send ACCEPT
             if len(self.promises) > len(robot_manager.get_robots()) / 2:
-                print(f"PAXOS: Robot {self.id} has majority of promises. Sending ACCEPT.")
+                # print(f"PAXOS: Robot {self.id} has majority of promises. Sending ACCEPT.")
                 accepted_value = self.proposals[self.proposal_number]
                 for teammate in robot_manager.get_robots():
                     if teammate.id != self.id:
@@ -190,9 +191,9 @@ class Robot:
                 # Proposer accpets
                 self.accepted_proposal_number = self.proposal_number
                 self.accepted_value = accepted_value
-                print(f"PAXOS: Robot {self.id} has accepted proposal {self.proposal_number}.")
+                # print(f"PAXOS: Robot {self.id} has accepted proposal {self.proposal_number}.")
                 if self.id in self.accepted_value[1]:
-                    print(f"PAXOS: Robot {self.id} is now a HELPER.")
+                    # print(f"PAXOS: Robot {self.id} is now a HELPER.")
                     self.goal = self.accepted_value[0]
                     self.role = 'HELPER'
                     # Set expected partner
@@ -216,7 +217,7 @@ class Robot:
                         continue
 
                     # Found gold, become a proposer
-                    print(f"PAXOS: Robot {self.id} found gold at {coord} and became a PROPOSER.")
+                    # print(f"PAXOS: Robot {self.id} found gold at {coord} and became a PROPOSER.")
                     self.paxos_role = 'PROPOSER'
                     self.proposal_number += 1
                     self.last_proposal_turn = self.turn_count
@@ -225,7 +226,7 @@ class Robot:
                         value = (coord, (self.id, closest_teammate_id))
                         self.proposals[self.proposal_number] = value
                         # Send PREPARE message
-                        print(f"PAXOS: Robot {self.id} is sending PREPARE for proposal {self.proposal_number}.")
+                        # print(f"PAXOS: Robot {self.id} is sending PREPARE for proposal {self.proposal_number}.")
                         for teammate in robot_manager.get_robots():
                             if teammate.id != self.id:
                                 self.message_board[teammate.id].add(('PREPARE', self.proposal_number, self.id))
@@ -260,14 +261,14 @@ class Robot:
         
         if best_incoming_prepare:
             proposal_num, proposer_id = best_incoming_prepare[1], best_incoming_prepare[2]
-            print(f"PAXOS: Robot {self.id} received PREPARE from {proposer_id} for proposal {proposal_num}.")
+            # print(f"PAXOS: Robot {self.id} received PREPARE from {proposer_id} for proposal {proposal_num}.")
 
             if self.paxos_role == 'PROPOSER' and proposal_num <= self.proposal_number:
                 pass
             elif proposal_num > self.proposal_number or \
                (proposal_num == self.proposal_number and proposer_id < self.promised_proposer_id):
                 
-                print(f"PAXOS: Robot {self.id} is promising for proposal {proposal_num}.")
+                # print(f"PAXOS: Robot {self.id} is promising for proposal {proposal_num}.")
                 self.proposal_number = proposal_num
                 self.promised_proposer_id = proposer_id
                 self.paxos_role = 'ACCEPTOR'
@@ -275,15 +276,15 @@ class Robot:
 
         for msg in accept_messages:
             _, proposal_num, value = msg
-            print(f"PAXOS: Robot {self.id} received ACCEPT for proposal {proposal_num} with value {value}.")
+            # print(f"PAXOS: Robot {self.id} received ACCEPT for proposal {proposal_num} with value {value}.")
             if self.paxos_role == 'ACCEPTOR' and proposal_num == self.proposal_number:
                 self.accepted_proposal_number = proposal_num
                 self.accepted_value = value
-                print(f"PAXOS: Robot {self.id} has accepted proposal {proposal_num}.")
+                # print(f"PAXOS: Robot {self.id} has accepted proposal {proposal_num}.")
                 self.paxos_role = 'IDLE'
 
                 if self.id in self.accepted_value[1]:
-                    print(f"PAXOS: Robot {self.id} is now a HELPER.")
+                    # print(f"PAXOS: Robot {self.id} is now a HELPER.")
                     self.goal = self.accepted_value[0]
                     self.role = 'HELPER'
                     robot_ids = self.accepted_value[1]
@@ -291,7 +292,7 @@ class Robot:
 
         for msg in promise_messages:
             _, proposal_num, from_id = msg
-            print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
+            # print(f"PAXOS: Robot {self.id} received PROMISE from {from_id} for proposal {proposal_num}.")
             if self.paxos_role == 'PROPOSER' and proposal_num == self.proposal_number:
                 self.promises.append(from_id)
         
@@ -354,7 +355,7 @@ class Robot:
             self.role = 'CARRIER'
 
     def drop_gold(self):
-        print(f"{self.id} has DROPPED a GOLD BAR at {self.coord_history[self.turn_count - 1]}")
+        # print(f"{self.id} has DROPPED a GOLD BAR at {self.coord_history[self.turn_count - 1]}")
         self.is_carrying = False
         self.goal = None
         self.role = None
@@ -365,7 +366,7 @@ class Robot:
         return self.coord_history[self.turn_count - 1]
 
     def score_gold(self):
-        print(f"{self.id} has SCORED!")
+        # print(f"{self.id} has SCORED!")
         self.is_carrying = False
         self.goal = None
         self.role = None
